@@ -23,7 +23,7 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 TIMEOUT = float(os.getenv("LLM_TIMEOUT", "8"))
 # Load shedder: cap concurrent outbound LLM calls so a small instance is not
 # overwhelmed under a burst. Excess requests fall back to deterministic templates.
-MAX_INFLIGHT = max(1, int(os.getenv("LLM_MAX_INFLIGHT", "2")))
+MAX_INFLIGHT = max(1, int(os.getenv("LLM_MAX_INFLIGHT", "1")))
 _sem = threading.BoundedSemaphore(MAX_INFLIGHT)
 
 SYSTEM = (

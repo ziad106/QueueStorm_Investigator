@@ -20,7 +20,7 @@ services:
       - key: LLM_TIMEOUT
         value: "6"
       - key: LLM_MAX_INFLIGHT
-        value: "2"
+        value: "1"
       # Set the real value in the Render dashboard (kept out of git).
       - key: GEMINI_API_KEY
         sync: false
