@@ -141,6 +141,27 @@ without any LLM or API key.** The LLM is a strictly-bounded enhancement: it only
 three text fields, never a decision, and every reply still passes the deterministic safety
 filter. Disable it any time by unsetting `LLM_PROVIDER` (pure deterministic, p95 ≈ 1 ms).
 
+**Model & cost reasoning.** Default path is **$0** — the deterministic engine needs no model,
+no key, no network, and carries all 35-point evidence reasoning + 20-point safety on its own.
+`gemini-2.5-flash` was chosen for the optional polish because it is the cheapest/fastest current
+Gemini tier that returns valid JSON reliably; we run it with `thinkingBudget=0` and
+`maxOutputTokens=600` to keep latency ~2 s and token cost minimal (one short call per request,
+only the 3 text fields + trimmed context are sent — never the full transaction history). It runs
+on the team's own free-tier key; on quota/rate-limit (429), timeout, or invalid output the
+request silently falls back to the zero-cost deterministic templates, so cost and reliability are
+both bounded. (`gemini-2.0-flash` free quota was already exhausted, hence 2.5-flash.)
+
+## Assumptions
+- Evaluation data is synthetic; no real payment system or live action is wired.
+- "Today" for relative-time matching is taken as the most recent transaction's date (requests
+  carry no wall-clock reference).
+- One ticket per request; transaction history is the only ground truth — fields absent from it
+  are never invented (`null` instead).
+- When evidence is ambiguous or missing, the service deliberately returns `insufficient_data` +
+  human review rather than guessing a transaction.
+- Bangla customer replies are produced when the complaint is Bangla-dominant; agent-facing
+  summary/next-action stay English (matches the sample pack convention).
+
 ## Performance
 - `/health` ready in < 1 s of start.
 - Deterministic `/analyze-ticket`: p95 ≈ 1–6 ms locally, well under the 5 s full-credit bar.
