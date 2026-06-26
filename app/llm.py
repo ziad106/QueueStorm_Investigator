@@ -7,8 +7,15 @@ forced through the deterministic safety filter. Any failure -> deterministic tem
 """
 import json
 import os
+import ssl
 import urllib.request
 import urllib.error
+
+try:
+    import certifi
+    _SSL = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    _SSL = ssl.create_default_context()
 
 ENABLED = os.getenv("LLM_PROVIDER", "").lower() == "gemini" and bool(os.getenv("GEMINI_API_KEY"))
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -48,14 +55,20 @@ def enhance(ticket, dec, base_summary, base_action, base_reply):
         ) + "\n\nReturn improved JSON now."
         body = json.dumps({
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "response_mime_type": "application/json"},
+            "generationConfig": {
+                "temperature": 0.2,
+                "response_mime_type": "application/json",
+                "maxOutputTokens": 600,
+                # Disable "thinking" on 2.5 models -> much lower latency.
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
         }).encode()
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
             f"?key={os.getenv('GEMINI_API_KEY')}"
         )
         req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=_SSL) as resp:
             data = json.loads(resp.read().decode())
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         obj = json.loads(text)

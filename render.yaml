@@ -14,7 +14,7 @@ services:
       - key: LLM_PROVIDER
         value: gemini
       - key: GEMINI_MODEL
-        value: gemini-2.0-flash
+        value: gemini-2.5-flash
       - key: LLM_TIMEOUT
         value: "8"
       # Set the real value in the Render dashboard (kept out of git).

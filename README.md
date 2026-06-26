@@ -134,10 +134,12 @@ Deterministic guardrails, independent of any model:
 | Component | Where it runs | Why | Failure handling |
 |---|---|---|---|
 | Rule-based investigation engine | In-process (CPU) | Deterministic, fast (p95 ≈ 1 ms), no key, fully reproducible. Owns all scored fields. | N/A — primary path |
-| Google Gemini (optional) | External API (team key) | Optional polish of free-text fields for Response Quality. | Timeout/error/invalid JSON → deterministic templates; output still safety-filtered |
+| Google Gemini `gemini-2.5-flash` (optional) | External API (team key) | Polish of the 3 free-text fields for Response Quality. Run with `thinkingBudget=0` for ~2 s latency. | Timeout/error/quota(429)/invalid JSON → deterministic templates; output still safety-filtered |
 
 The system is **fully functional and scores Stage-1 (evidence, safety, schema, performance)
-without any LLM or API key.** The LLM is a strictly-bounded enhancement, off by default.
+without any LLM or API key.** The LLM is a strictly-bounded enhancement: it only rewords the
+three text fields, never a decision, and every reply still passes the deterministic safety
+filter. Disable it any time by unsetting `LLM_PROVIDER` (pure deterministic, p95 ≈ 1 ms).
 
 ## Performance
 - `/health` ready in < 1 s of start.
