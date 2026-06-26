@@ -190,4 +190,6 @@ contains variable names only. Real keys, if the optional LLM is used, are provid
 hosting platform's environment, never the repository.
 
 ## Credits
-FastAPI, Uvicorn, Pydantic (open-source). Optional: Google Gemini API.
+Open-source: FastAPI, Starlette, Uvicorn, Pydantic, certifi. Optional external service:
+Google Gemini API (`gemini-2.5-flash`). All other logic (engine, safety, text, pipeline) is
+the team's own work, written during the round.
