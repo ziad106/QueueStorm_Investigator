@@ -14,3 +14,13 @@ SUST_QueueStorm_Complete_Guide.md
 Chatgpt_Recommendations.md
 PRELI_RULES_AND_EVALUATION.md
 SUST_Hackathon_Preli_Problem_Statement.pdf
+SUST_Preli_Evaluation_Rubric_With_Explanations.pdf
+SUST_Preli_Team_Instructions_Manual.pdf
+
+# Local artifacts (submitted via the form/video link, not the repo)
+*.pptx
+~$*
+*.mkv
+*.mp4
+image.png
+.claude/

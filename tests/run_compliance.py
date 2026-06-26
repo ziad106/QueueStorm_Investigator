@@ -14,7 +14,9 @@ def fail(m):
 REFUND_PROMISE = re.compile(r"\bwe(?:\s*will|'ll)\s+(?:refund|reverse|reimburse|return)\b|"
                             r"\b(?:your\s+)?(?:refund|reversal)\s+(?:has\s+been|is)\s+(?:processed|approved|done)\b|"
                             r"\baccount\s+(?:will\s+be|has\s+been)\s+(?:unblocked|restored)\b", re.I)
-SECRETish = re.compile(r"traceback|file \".*\", line \d+|AQ\.Ab8|AIza|sk-[A-Za-z0-9]{20}", re.I)
+SECRETish = re.compile(r"traceback|file \".{1,80}\", line \d+|AQ\.[A-Za-z0-9_]{6,}|"
+                       r"AIza[0-9A-Za-z_\-]{20,}|sk-[A-Za-z0-9]{20,}", re.I)
+LEAK_SENTINEL = "INTERNAL_LEAK_SENTINEL_9f3x7q"
 ENUM_CASE = {"wrong_transfer","payment_failed","refund_request","duplicate_payment",
              "merchant_settlement_delay","agent_cash_in_issue","phishing_or_social_engineering","other"}
 
@@ -77,7 +79,7 @@ print("[3] no-guessing on ambiguous checked")
 # --- 4) Fallback never leaks a stack trace / secret, always valid schema ---
 orig = pipeline.engine.investigate
 try:
-    pipeline.engine.investigate = lambda t: (_ for _ in ()).throw(RuntimeError("boom secret AQ.Ab8xxx"))
+    pipeline.engine.investigate = lambda t: (_ for _ in ()).throw(RuntimeError("internal failure " + LEAK_SENTINEL))
     fb = None
     try:
         analyze(TicketIn(ticket_id="F1", complaint="trigger"))
@@ -86,7 +88,7 @@ try:
     fb = fb or safe_fallback("F1")
     TicketOut(**fb.model_dump())  # must validate
     txt = fb.model_dump_json()
-    if SECRETish.search(txt): fail("fallback leaks secret/trace")
+    if SECRETish.search(txt) or LEAK_SENTINEL in txt: fail("fallback leaks secret/trace")
     if fb.human_review_required is not True: fail("fallback should require human review")
 finally:
     pipeline.engine.investigate = orig
