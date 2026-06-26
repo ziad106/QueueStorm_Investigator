@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.env
+!.env.example
+.DS_Store
+.pytest_cache/
+
+# Internal prep/planning docs — not part of the submission codebase
+HACKATHON_MASTER-1_REVISED.md
+SUST_QueueStorm_Complete_Guide.md
+Chatgpt_Recommendations.md
+PRELI_RULES_AND_EVALUATION.md
+SUST_Hackathon_Preli_Problem_Statement.pdf
