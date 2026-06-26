@@ -16,7 +16,7 @@ services:
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: LLM_TIMEOUT
-        value: "8"
+        value: "6"
       # Set the real value in the Render dashboard (kept out of git).
       - key: GEMINI_API_KEY
         sync: false

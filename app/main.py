@@ -1,6 +1,7 @@
 """QueueStorm Investigator API. GET /health + POST /analyze-ticket."""
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from .schemas import TicketIn
@@ -40,9 +41,11 @@ async def analyze_ticket(request: Request):
             content={"error": "Field 'complaint' must be a non-empty string."},
         )
 
-    # 4. Analyze. Any unexpected error -> safe valid 200, never a 5xx.
+    # 4. Analyze in a threadpool so the blocking LLM call never stalls the event
+    #    loop (a single hung request must not freeze concurrent /health or others).
+    #    Any unexpected error -> safe valid 200, never a 5xx.
     try:
-        result = analyze(ticket)
+        result = await run_in_threadpool(analyze, ticket)
     except Exception:
         result = safe_fallback(getattr(ticket, "ticket_id", None))
     return JSONResponse(status_code=200, content=result.model_dump())
