@@ -1,8 +1,8 @@
 """QueueStorm Investigator API. GET /health + POST /analyze-ticket."""
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
-from pydantic import ValidationError
 
 from .schemas import TicketIn
 from .pipeline import analyze, safe_fallback
@@ -15,39 +15,29 @@ def health():
     return {"status": "ok"}
 
 
+@app.exception_handler(RequestValidationError)
+async def on_validation_error(request: Request, exc: RequestValidationError):
+    # Malformed JSON or missing/invalid required fields -> controlled 400 (spec 4.1),
+    # never FastAPI's default 422 and never a crash.
+    return JSONResponse(
+        status_code=400,
+        content={"error": "Malformed input: 'ticket_id' and 'complaint' are required, body must be valid JSON."},
+    )
+
+
 @app.post("/analyze-ticket")
-async def analyze_ticket(request: Request):
-    # 1. Parse JSON. Malformed body -> controlled 400, never a crash.
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body."})
-    if not isinstance(body, dict):
-        return JSONResponse(status_code=400, content={"error": "Request body must be a JSON object."})
-
-    # 2. Validate against schema. Missing required fields -> 400.
-    try:
-        ticket = TicketIn(**body)
-    except ValidationError:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Missing or invalid required fields: 'ticket_id' and 'complaint' are required."},
-        )
-
-    # 3. Semantically empty complaint -> 422.
+async def analyze_ticket(ticket: TicketIn):
+    # Schema valid but semantically empty complaint -> 422 (spec 4.1).
     if not ticket.complaint or not ticket.complaint.strip():
-        return JSONResponse(
-            status_code=422,
-            content={"error": "Field 'complaint' must be a non-empty string."},
-        )
+        return JSONResponse(status_code=422, content={"error": "Field 'complaint' must be a non-empty string."})
 
-    # 4. Analyze in a threadpool so the blocking LLM call never stalls the event
-    #    loop (a single hung request must not freeze concurrent /health or others).
-    #    Any unexpected error -> safe valid 200, never a 5xx.
+    # Analyze in a threadpool so the blocking LLM call never stalls the event loop
+    # (a single hung request must not freeze concurrent /health or other requests).
+    # Any unexpected error -> safe valid 200, never a 5xx.
     try:
         result = await run_in_threadpool(analyze, ticket)
     except Exception:
-        result = safe_fallback(getattr(ticket, "ticket_id", None))
+        result = safe_fallback(ticket.ticket_id)
     return JSONResponse(status_code=200, content=result.model_dump())
 
 
