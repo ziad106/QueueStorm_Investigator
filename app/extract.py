@@ -4,29 +4,49 @@ from datetime import datetime, timedelta
 
 BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
 
+# Phishing/social-engineering signals. Bare credential words are NOT enough — they
+# must co-occur with a social-engineering context (someone else asking), otherwise
+# "I forgot my PIN" would be misclassified. Strong signals fire on their own.
+PHISH_STRONG = [
+    "scam", "phishing", "fraud", "fraudster", "claiming to be", "claim to be",
+    "claims to be", "they are from", "pretending", "pretend to be", "impersonat",
+    "account will be blocked", "account will be suspended", "verify your account",
+    "won a prize", "lottery", "click this link", "click the link", "suspicious link",
+    "suspicious call", "suspicious sms", "suspicious message",
+    "প্রতারক", "প্রতারণা", "ফাঁদ", "স্ক্যাম", "ভুয়া কল", "ভুয়া এসএমএস",
+    "অ্যাকাউন্ট ব্লক", "একাউন্ট ব্লক", "লিংকে ক্লিক", "সন্দেহজনক",
+]
+CRED = ["otp", "pin", "password", "cvv", "card number", "ওটিপি", "পিন", "পাসওয়ার্ড"]
+PHISH_ASK = [
+    "asked for", "asking for", "asked me", "ask me", "wants my", "want my", "demanded",
+    "called me", "calling me", "call asking", "sent me a", "messaged me", "texted me",
+    "someone", "stranger", "unknown person", "unknown caller", "a person called",
+    "কেউ", "ফোন করে", "এসএমএস", "চাইছে", "চেয়েছে", "অপরিচিত", "দিতে বলছে",
+]
+
 # Multilingual keyword banks (en / bn / banglish). Complaint is untrusted DATA only.
 KW = {
-    "phishing": [
-        "otp", "pin", "password", "cvv", "card number", "scam", "phishing", "fraud",
-        "suspicious", "click", "link", "verify your account", "account will be blocked",
-        "asked for my", "asked me for", "claiming to be", "claim to be", "they are from",
-        "ওটিপি", "পিন", "পাসওয়ার্ড", "প্রতারক", "প্রতারণা", "ফাঁদ", "সন্দেহজনক",
-        "ব্লক", "লিংক", "ক্লিক", "ফোন করে", "এসএমএস",
-    ],
     "duplicate": [
-        "twice", "two times", "double", "duplicate", "deducted twice", "charged twice",
-        "double charge", "double deduct", "two time", "দুইবার", "দুবার", "ডাবল", "দুই বার",
+        "twice", "two times", "2 times", "double", "duplicate", "deducted twice",
+        "charged twice", "double charge", "double charged", "double deduct",
+        "double cut", "double payment", "charged again", "again charged", "two time",
+        "deducted two", "cut two", "দুইবার", "দুবার", "ডাবল", "দুই বার", "দুইবার কাটা",
     ],
     "failed": [
         "failed", "fail", "but my balance was deducted", "balance was deducted",
         "balance deducted", "deducted but", "showed failed", "transaction failed",
-        "payment failed", "did not go through", "didn't go through",
-        "ব্যর্থ", "ফেল", "কাটা হয়েছে কিন্তু", "কেটে নিয়েছে",
+        "payment failed", "did not go through", "didn't go through", "didn't work",
+        "did not work", "not successful", "unsuccessful", "money is gone", "money gone",
+        "taka gone", "deducted but no", "cut but no", "but it failed", "but failed",
+        "ব্যর্থ", "ফেল", "কাটা হয়েছে কিন্তু", "কেটে নিয়েছে", "হয়নি কিন্তু", "কাজ করেনি",
     ],
     "wrong_transfer": [
         "wrong number", "wrong person", "wrong recipient", "wrong account", "rong number",
-        "by mistake", "mistakenly sent", "sent to the wrong", "wrong nmbr",
-        "ভুল নাম্বার", "ভুল নম্বর", "ভুল মানুষ", "ভুল করে", "ভুল জায়গায়",
+        "by mistake", "mistakenly sent", "mistakenly transferred", "sent to the wrong",
+        "wrong nmbr", "accidentally sent", "accidentally transferred", "unknown number",
+        "wrong receiver", "didn't mean to send", "did not mean to send", "meant to send",
+        "ভুল নাম্বার", "ভুল নম্বর", "ভুল মানুষ", "ভুল করে", "ভুল জায়গায়", "ভুলে পাঠিয়েছি",
+        "অন্য নম্বরে", "ভুল মানুষকে",
     ],
     "agent_cash_in": [
         "cash in", "cash-in", "cashin", "agent", "deposited", "deposit",
@@ -64,6 +84,17 @@ def has_kw(text, key):
     return any(k in t for k in KW[key])
 
 
+def is_phishing(complaint):
+    """Phishing requires a strong scam signal, OR a credential mention together with a
+    social-engineering context (someone else asking). 'I forgot my PIN' is not phishing."""
+    t = complaint.lower()
+    if any(k in t for k in PHISH_STRONG):
+        return True
+    cred = any(k in t for k in CRED)
+    ask = any(k in t for k in PHISH_ASK)
+    return cred and ask
+
+
 def detect_language(text, declared):
     if declared in ("en", "bn", "mixed"):
         return declared
@@ -89,20 +120,25 @@ def reply_language(text, declared):
 
 def extract_amounts(text):
     t = normalize(text)
+    # Strip token IDs (TXN-9101) and phone numbers first so their digits are never
+    # read as money amounts.
+    t = re.sub(r"\b(?:TXN|AGENT|MERCHANT|BILLER)[-\w]+", " ", t, flags=re.I)
+    t = re.sub(r"(?:\+?880)?1\d{8,9}", " ", t)
     amounts = set()
     # thousands/lakh shorthand
     for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(k|hazar|thousand|হাজার)\b", t, re.I):
         amounts.add(round(float(m.group(1)) * 1000, 2))
     for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(lakh|lac|লাখ|লক্ষ)\b", t, re.I):
         amounts.add(round(float(m.group(1)) * 100000, 2))
-    # plain numbers with optional thousands separators
-    for m in re.finditer(r"\b(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\b", t):
+    # plain numbers with optional thousands separators; not adjacent to letters/hyphen
+    # (so token fragments don't leak) and capped at 7 digits (phones excluded).
+    for m in re.finditer(r"(?<![\w-])(\d{1,3}(?:,\d{3})+|\d{1,7})(?:\.\d+)?(?![\w-])", t):
         raw = m.group(0).replace(",", "")
         try:
             v = float(raw)
         except ValueError:
             continue
-        if v >= 10:  # ignore tiny ints like "1" item / "2pm"
+        if 10 <= v <= 9_999_999:  # ignore tiny ints (item counts, "2pm") and phone-scale
             amounts.add(v)
     return amounts
 

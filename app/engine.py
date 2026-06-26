@@ -34,7 +34,7 @@ def _mentions_send(complaint):
 
 def classify(complaint, user_type):
     """Keyword priority classification. Complaint is untrusted data."""
-    if ex.has_kw(complaint, "phishing"):
+    if ex.is_phishing(complaint):
         return "phishing_or_social_engineering"
     if ex.has_kw(complaint, "duplicate"):
         return "duplicate_payment"
@@ -111,6 +111,20 @@ def find_duplicate(txns):
     return None
 
 
+def _status_contradicts(case, tx):
+    """True when the matched transaction's status contradicts the complaint."""
+    if tx is None:
+        return False
+    s = tx.status
+    if case == "payment_failed":
+        return s == "completed"            # claimed failed, but it actually completed
+    if case == "merchant_settlement_delay":
+        return s in ("completed", "reversed")   # claimed delayed, but already settled
+    if case == "agent_cash_in_issue":
+        return s == "reversed"             # claimed not received, but it was reversed
+    return False
+
+
 def established_recipient(tx, txns):
     if not tx or not tx.counterparty:
         return False
@@ -142,12 +156,11 @@ def investigate(ticket):
             codes += ["duplicate_candidate", "amount_match", "biller_verification_required"]
             confidence = 0.9
         else:
-            best_tx, sc, c = _best(txns, feats, exp_type, exp_status)
-            if best_tx and sc >= AMOUNT:
-                relevant, verdict, codes = best_tx.transaction_id, "consistent", codes + c
-                confidence = 0.8
-            else:
-                confidence = 0.6
+            # Customer claims a duplicate but no second matching charge exists ->
+            # cannot confirm from the evidence. Do not guess; flag insufficient.
+            relevant, verdict = None, "insufficient_data"
+            codes += ["duplicate_unconfirmed", "needs_clarification"]
+            confidence = 0.55
 
     else:
         best_tx, sc, c, ambiguous = _best_with_ambiguity(txns, feats, exp_type, exp_status)
@@ -173,6 +186,13 @@ def investigate(ticket):
                 codes.append("established_recipient_pattern")
                 codes.append("evidence_inconsistent")
                 confidence = 0.75
+            elif _status_contradicts(case, best_tx):
+                # Data contradicts the complaint (e.g. claimed "failed" but status is
+                # completed, or settlement already completed). Investigator must flag it.
+                verdict = "inconsistent"
+                codes.append("status_contradicts_claim")
+                codes.append("evidence_inconsistent")
+                confidence = 0.7
             else:
                 verdict = "consistent"
                 codes.append("transaction_match")
