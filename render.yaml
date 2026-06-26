@@ -10,16 +10,17 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
-      # Optional LLM polish layer is OFF by default for judging: on Render's free
-      # 0.1-CPU instance, concurrent outbound LLM calls can cause sporadic 520s.
-      # Deterministic mode is uniform ~6ms and never 5xx. To enable the polish for
-      # a demo, set LLM_PROVIDER=gemini and add GEMINI_API_KEY in the dashboard.
+      # Optional LLM polish layer. Decisions/safety stay deterministic regardless.
+      # A concurrency cap (LLM_MAX_INFLIGHT) sheds load to deterministic templates
+      # under bursts so the free 0.1-CPU instance is not overwhelmed (avoids 520s).
       - key: LLM_PROVIDER
-        value: ""
+        value: gemini
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: LLM_TIMEOUT
         value: "6"
+      - key: LLM_MAX_INFLIGHT
+        value: "2"
       # Set the real value in the Render dashboard (kept out of git).
       - key: GEMINI_API_KEY
         sync: false

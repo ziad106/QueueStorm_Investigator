@@ -8,6 +8,7 @@ forced through the deterministic safety filter. Any failure -> deterministic tem
 import json
 import os
 import ssl
+import threading
 import urllib.request
 import urllib.error
 
@@ -20,6 +21,10 @@ except Exception:
 ENABLED = os.getenv("LLM_PROVIDER", "").lower() == "gemini" and bool(os.getenv("GEMINI_API_KEY"))
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 TIMEOUT = float(os.getenv("LLM_TIMEOUT", "8"))
+# Load shedder: cap concurrent outbound LLM calls so a small instance is not
+# overwhelmed under a burst. Excess requests fall back to deterministic templates.
+MAX_INFLIGHT = max(1, int(os.getenv("LLM_MAX_INFLIGHT", "2")))
+_sem = threading.BoundedSemaphore(MAX_INFLIGHT)
 
 SYSTEM = (
     "You are a support-agent copilot for a digital finance platform. You ONLY rewrite three "
@@ -36,6 +41,9 @@ SYSTEM = (
 def enhance(ticket, dec, base_summary, base_action, base_reply):
     """Return (summary, action, reply) or the base text on any failure."""
     if not ENABLED:
+        return base_summary, base_action, base_reply
+    # Shed load instantly under a burst -> deterministic text, no extra outbound call.
+    if not _sem.acquire(blocking=False):
         return base_summary, base_action, base_reply
     try:
         payload = {
@@ -80,3 +88,5 @@ def enhance(ticket, dec, base_summary, base_action, base_reply):
         return s, a, r
     except Exception:
         return base_summary, base_action, base_reply
+    finally:
+        _sem.release()
