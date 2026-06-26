@@ -10,9 +10,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
-      # Optional LLM polish layer. Decision fields stay deterministic regardless.
+      # Optional LLM polish layer is OFF by default for judging: on Render's free
+      # 0.1-CPU instance, concurrent outbound LLM calls can cause sporadic 520s.
+      # Deterministic mode is uniform ~6ms and never 5xx. To enable the polish for
+      # a demo, set LLM_PROVIDER=gemini and add GEMINI_API_KEY in the dashboard.
       - key: LLM_PROVIDER
-        value: gemini
+        value: ""
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: LLM_TIMEOUT
